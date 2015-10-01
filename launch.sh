@@ -111,7 +111,7 @@ if [ "$(whoami)" != "root" ]; then
 fi
 
 here="$(pwd)"
-log="$here/logs"
+logs="$here/logs"
 tmp="$here/tmp"
 
 e "Automated WPS hacking"
